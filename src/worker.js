@@ -1,7 +1,7 @@
 //base run 
 
 // Import necessary libraries
-import { hash, compare } from 'bcryptjs';
+
 import AuthHandler from './handler/authHandler';
 import PortfolioHandler from './handler/portfolioHandler';
 import ResumeHandler from './handler/resumeHandler';

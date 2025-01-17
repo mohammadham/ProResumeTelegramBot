@@ -1,7 +1,11 @@
+import {Telegram} from "telegramHandler";
+import {KVStore} from "kvHandler";
 class PortfolioHandler {
-    constructor(botToken, userKV, workerUrl) {
+    constructor(botToken, workerUrl,telegram, kvStore) {
+        this.telegram = telegram;
+        this.kvStore = kvStore;
         this.botToken = botToken;
-        this.usersKV = userKV;
+        // this.usersKV = userKV;
         this.workerUrl = workerUrl;
     }
 
@@ -25,33 +29,33 @@ class PortfolioHandler {
             ]
         };
 
-        await this.sendMessage(chatId, 'Portfolio Management:', { reply_markup: keyboard });
+        await this.telegram.sendMessage(chatId, 'Portfolio Management:', { reply_markup: keyboard });
     }
 
     async updateUserPortfolio(userId, field, value) {
-        const userData = JSON.parse(await this.usersKV.get(`user_${userId}`));
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
         if (!userData.portfolio) userData.portfolio = {};
         userData.portfolio[field] = value;
-        await this.usersKV.put(`user_${userId}`, JSON.stringify(userData));
+        await this.kvStore.put(`user_${userId}`, JSON.stringify(userData));
     }
 
     async handleViewPortfolios(chatId, userId) {
-        const userData = JSON.parse(await this.usersKV.get(`user_${userId}`));
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
         if (!userData.portfolio || !userData.portfolio.name) {
-            return this.sendMessage(chatId, 'You haven\'t created any portfolios yet.');
+            return this.telegram.sendMessage(chatId, 'You haven\'t created any portfolios yet.');
         }
         const portfolioLink = await this.generatePortfolioLink(userId);
-        return this.sendMessage(chatId, `Your portfolio: ${userData.portfolio.name}\nLink: ${portfolioLink}`);
+        return this.telegram.sendMessage(chatId, `Your portfolio: ${userData.portfolio.name}\nLink: ${portfolioLink}`);
     }
 
     async startPortfolioCreation(chatId, userId, type) {
-        await this.usersKV.put(`${userId}_portfolio_type`, type);
+        await this.kvStore.put(`${userId}_portfolio_type`, type);
         await this.setUserState(userId, UserState.AWAITING_PORTFOLIO_NAME);
         
         const message = `Let's create your ${type} portfolio!\n\n` +
             `First, please enter a name for your portfolio:`;
         
-        await this.sendMessage(chatId, message);
+        await this.telegram.sendMessage(chatId, message);
     }
 
     async handlePortfolioCreationFlow(chatId, userId) {
@@ -72,21 +76,10 @@ class PortfolioHandler {
             `🌟 Custom - Unique and Custom design` 
             ;
 
-        await this.sendMessage(chatId, message, { reply_markup: keyboard });
+        await this.telegram.sendMessage(chatId, message, { reply_markup: keyboard });
     }
 
-    async sendMessage(chatId, text, options = {}) {
-        await fetch(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
-            method: 'POST',
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: text,
-                parse_mode: 'HTML',
-                ...options
-            }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
+
 }
 
 export default PortfolioHandler;
