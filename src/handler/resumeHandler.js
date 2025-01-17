@@ -1,11 +1,11 @@
-import {Telegram} from "telegramHandler";
-import {KVStore} from "kvHandler";
+import Telegram from './telegramHandler';
+import KVStore from './kvHandler';
+
 class ResumeHandler {
-    constructor(botToken, workerUrltelegram, kvStore) {
+    constructor(botToken, workerUrl, telegram, kvStore) {
         this.telegram = telegram;
         this.kvStore = kvStore;
         this.botToken = botToken;
-        this.usersKV = userKV;
         this.workerUrl = workerUrl;
     }
 
@@ -78,8 +78,6 @@ class ResumeHandler {
     
         await this.telegram.sendMessage(chatId, message, { reply_markup: keyboard });
     }
-
-
 }
 
 export default ResumeHandler;

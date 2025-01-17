@@ -1,21 +1,27 @@
 class KVStore {
-    constructor(ADMIN_KV, USERS_KV) {
-        this.ADMIN_KV = ADMIN_KV;
-        this.USERS_KV = USERS_KV;
-    }
-
-    async put(key, value) {
-        await this.USERS_KV.put(key, JSON.stringify(value));
+    constructor(namespace) {
+        this.namespace = namespace;
     }
 
     async get(key) {
-        const data = await this.USERS_KV.get(key);
-        return data ? JSON.parse(data) : null;
+        return await this.namespace.get(key);
+    }
+
+    async put(key, value) {
+        if (typeof value === 'object') {
+            value = JSON.stringify(value);
+        }
+        await this.namespace.put(key, value);
     }
 
     async delete(key) {
-        await this.USERS_KV.delete(key);
+        await this.namespace.delete(key);
     }
 
-    // Additional methods for admin data
+    async list(prefix) {
+        const list = await this.namespace.list({ prefix });
+        return list.keys;
+    }
 }
+
+export default KVStore;

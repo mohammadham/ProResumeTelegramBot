@@ -1,13 +1,12 @@
-import {Telegram} from "telegramHandler";
-import {KVStore} from "kvHandler";
+import Telegram from './telegramHandler';
+import KVStore from './kvHandler';
+
 class ProfileHandler {
     constructor(botToken, telegram, kvStore) {
         this.telegram = telegram;
         this.kvStore = kvStore;
         this.botToken = botToken;
-        // this.usersKV = userKV;
     }
-
 
     async handleProfileView(chatId, userId) {
         const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
@@ -30,8 +29,6 @@ class ProfileHandler {
     
         await this.telegram.sendMessage(chatId, profileText, { reply_markup: keyboard });
     }
-
-   
 }
 
 export default ProfileHandler;

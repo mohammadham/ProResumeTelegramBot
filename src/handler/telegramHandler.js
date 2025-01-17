@@ -23,21 +23,22 @@ class Telegram {
             headers: { 'Content-Type': 'application/json' }
         });
     }
-      
-      async  editMessageCaption(chatId, messageId, caption) {
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption`, {
-          method: 'POST',
-          body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption }),
-          headers: { 'Content-Type': 'application/json' }
+
+    async editMessageCaption(chatId, messageId, caption) {
+        await fetch(`https://api.telegram.org/bot${this.BOT_TOKEN}/editMessageCaption`, {
+            method: 'POST',
+            body: JSON.stringify({ chat_id: chatId, message_id: messageId, caption }),
+            headers: { 'Content-Type': 'application/json' }
         });
-      }
-      
-      async  editMessageMedia(chatId, messageId, media) {
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageMedia`, {
-          method: 'POST',
-          body: JSON.stringify({ chat_id: chatId, message_id: messageId, media }),
-          headers: { 'Content-Type': 'application/json' }
+    }
+
+    async editMessageMedia(chatId, messageId, media) {
+        await fetch(`https://api.telegram.org/bot${this.BOT_TOKEN}/editMessageMedia`, {
+            method: 'POST',
+            body: JSON.stringify({ chat_id: chatId, message_id: messageId, media }),
+            headers: { 'Content-Type': 'application/json' }
         });
-      }
-    // Additional methods for editing messages, forwarding messages, etc.
+    }
 }
+
+export default Telegram;
