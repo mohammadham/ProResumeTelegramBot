@@ -1,5 +1,11 @@
+//base run 
+
 // Import necessary libraries
 import { hash, compare } from 'bcryptjs';
+import AuthHandler from './handler/authHandler';
+import PortfolioHandler from './handler/portfolioHandler';
+import ResumeHandler from './handler/resumeHandler';
+import ProfileHandler from './handler/profileHandler';
 
 // Define environment variables
 const BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN';
@@ -10,6 +16,12 @@ const WORKER_URL = 'YOUR_WORKER_URL';
 // Initialize KV namespaces
 const ADMIN_KV = KV_NAMESPACE_ADMIN;
 const USERS_KV = KV_NAMESPACE_USERS;
+
+// Initialize handlers
+const authHandler = new AuthHandler(BOT_TOKEN, USERS_KV, ADMIN_KV);
+const portfolioHandler = new PortfolioHandler(BOT_TOKEN, USERS_KV, WORKER_URL);
+const resumeHandler = new ResumeHandler(BOT_TOKEN, USERS_KV, WORKER_URL);
+const profileHandler = new ProfileHandler(BOT_TOKEN, USERS_KV);
 
 // Add new state management
 const UserState = {
@@ -105,11 +117,7 @@ async function getWebhookInfo() {
     return new Response(JSON.stringify(await response.json()));
 }
 
-// Admin identification function
-async function isUserAdmin(userId) {
-  const admins = await ADMIN_KV.get('admin_list');
-  return admins ? admins.includes(userId) : false;
-}
+
 
 // Admin features
 async function editMessageText(chatId, messageId, text) {
@@ -136,26 +144,19 @@ async function editMessageMedia(chatId, messageId, media) {
   });
 }
 
-// User registration function
-async function registerUser(userId, username, password) {
-  const hashedPassword = await hash(password, 10);
-  const data = { username, password: hashedPassword, portfolio: {}, resume: {} };
-  await USERS_KV.put(String(userId), JSON.stringify(data));
-}
-
 // Client interaction
 async function handleUserInteraction(message, chatId, userId, text) {
     // Check if user is logged in
-    const isLoggedIn = await checkUserLogin(userId);
+    const isLoggedIn = await authHandler.checkUserLogin(userId);
     const userState = await getUserState(userId);
 
     if (!isLoggedIn && userState === UserState.NONE) {
-        return showLoginOptions(chatId);
+        return authHandler.showLoginOptions(chatId);
     }
 
     // Handle authentication states
     if (!isLoggedIn) {
-        return handleAuthFlow(message, chatId, userId, text, userState);
+        return authHandler.handleAuthFlow(message, chatId, userId, text, userState);
     }
 
     // Handle normal commands for logged in users
@@ -178,18 +179,6 @@ async function handleUserInteraction(message, chatId, userId, text) {
     return showAvailableCommands(chatId, userId);
 }
 
-async function showLoginOptions(chatId) {
-    const keyboard = {
-        inline_keyboard: [
-            [{ text: '🔑 Login', callback_data: 'login' },
-             { text: '📝 Register', callback_data: 'register' }],
-            [{ text: '❓ Help', callback_data: 'help' }]
-        ]
-    };
-    
-    await sendMessage(chatId, 'Welcome! Please login or register to continue:', 
-        { reply_markup: keyboard });
-}
 
 async function handleCommands(message, chatId, userId, text) {
     const command = text.split(' ')[0].toLowerCase();
@@ -198,9 +187,11 @@ async function handleCommands(message, chatId, userId, text) {
         case '/start':
             return showAvailableCommands(chatId, userId);
         case '/portfolio':
-            return handlePortfolioCommand(chatId, userId);
+            return portfolioHandler.handlePortfolioCommand(chatId, userId);
         case '/resume':
-            return handleResumeCommand(chatId, userId);
+            return resumeHandler.handleResumeCommand(chatId, userId);
+        case '/profile':
+            return profileHandler.handleProfileView(chatId, userId);
         case '/help':
             return showHelp(chatId);
         default:
@@ -240,21 +231,21 @@ async function handleCallbackQuery(callback) {
     switch (data) {
         case 'login':
             await setUserState(userId, UserState.AWAITING_LOGIN_USERNAME);
-            return sendMessage(chatId, 'Please enter your username:');
+            return authHandler.sendMessage(chatId, 'Please enter your username:');
         case 'register':
             await setUserState(userId, UserState.AWAITING_REGISTER_USERNAME);
-            return sendMessage(chatId, 'Please enter your desired username:');
+            return authHandler.sendMessage(chatId, 'Please enter your desired username:');
         case 'logout':
-            await logout(userId);
-            return showLoginOptions(chatId);
+            await authHandler.logout(userId);
+            return authHandler.showLoginOptions(chatId);
         case 'create_portfolio':
-            return handlePortfolioCreationFlow(chatId, userId);
+            return portfolioHandler.handlePortfolioCreationFlow(chatId, userId);
         case 'create_resume':
-            return handleResumeCreationFlow(chatId, userId);
+            return resumeHandler.handleResumeCreationFlow(chatId, userId);
         case 'portfolio':
-            return handlePortfolioCommand(chatId, userId);
+            return portfolioHandler.handlePortfolioCommand(chatId, userId);
         case 'resume':
-            return handleResumeCommand(chatId, userId);
+            return resumeHandler.handleResumeCommand(chatId, userId);
         case 'help':
             return showHelp(chatId);
         case 'manage_users':
@@ -276,173 +267,16 @@ async function handleCallbackQuery(callback) {
             return sendMessage(chatId, 'Please enter your personal information (name, email, phone):');
         
         case 'view_portfolios':
-            return handleViewPortfolios(chatId, userId);
+            return portfolioHandler.handleViewPortfolios(chatId, userId);
         
         case 'view_resumes':
-            return handleViewResumes(chatId, userId);
+            return resumeHandler.handleViewResumes(chatId, userId);
         
         case 'back_to_main':
             await setUserState(userId, UserState.NONE);
             return showAvailableCommands(chatId, userId);
         case 'profile':
-            return handleProfileView(chatId, userId);
-    }
-}
-
-async function handleProfileView(chatId, userId) {
-    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
-    if (!userData) {
-        return sendMessage(chatId, 'Profile not found. Please login again.');
-    }
-
-    const keyboard = {
-        inline_keyboard: [
-            [{ text: '📝 Edit Profile', callback_data: 'edit_profile' }],
-            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
-        ]
-    };
-
-    const profileText = `👤 Your Profile\n\n` +
-        `Username: ${userData.username}\n` +
-        `Portfolios: ${userData.portfolio ? '1' : '0'}\n` +
-        `Resumes: ${userData.resume ? '1' : '0'}\n` +
-        `Last Login: ${new Date(userData.lastLogin).toLocaleString()}`;
-
-    await sendMessage(chatId, profileText, { reply_markup: keyboard });
-}
-
-async function handlePortfolioCreationFlow(chatId, userId) {
-    const keyboard = {
-        inline_keyboard: [
-            [{ text: '🎨 Basic Portfolio', callback_data: 'portfolio_basic' }],
-            [{ text: '💼 Professional Portfolio', callback_data: 'portfolio_pro' }],
-            [{ text: '🌟 Creative Portfolio', callback_data: 'portfolio_creative' }],
-            [{ text: '🌟 Custom Portfolio', callback_data: 'portfolio_custom' }],
-            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
-        ]
-    };
-
-    const message = `Choose your portfolio type:\n\n` +
-        `🎨 Basic - Simple and clean design\n` +
-        `💼 Professional - Formal and detailed\n` +
-        `🌟 Creative - Unique and eye-catching\n`+
-        `🌟 Custom - Unique and Custom design` 
-        ;
-
-    await sendMessage(chatId, message, { reply_markup: keyboard });
-}
-
-async function handleResumeCreationFlow(chatId, userId) {
-    const keyboard = {
-        inline_keyboard: [
-            [{ text: '📄 Standard Resume', callback_data: 'resume_standard' }],
-            [{ text: '🎯 Targeted Resume', callback_data: 'resume_targeted' }],
-            [{ text: '💫 Modern Resume', callback_data: 'resume_modern' }],
-            [{ text: '🌟 Custom Resume', callback_data: 'resume_custom' }],
-            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
-        ]
-    };
-
-    const message = `Choose your resume type:\n\n` +
-        `📄 Standard - Traditional format\n` +
-        `🎯 Targeted - Industry-specific\n` +
-        `💫 Modern - Contemporary design\n` +
-        `🌟 Custom - Unique and Custom design` ;
-
-    await sendMessage(chatId, message, { reply_markup: keyboard });
-}
-
-async function startPortfolioCreation(chatId, userId, type) {
-    await USERS_KV.put(`${userId}_portfolio_type`, type);
-    await setUserState(userId, UserState.AWAITING_PORTFOLIO_NAME);
-    
-    const message = `Let's create your ${type} portfolio!\n\n` +
-        `First, please enter a name for your portfolio:`;
-    
-    await sendMessage(chatId, message);
-}
-
-async function startResumeCreation(chatId, userId, type) {
-    await USERS_KV.put(`${userId}_resume_type`, type);
-    await setUserState(userId, UserState.AWAITING_RESUME_PERSONAL);
-    
-    const message = `Let's create your ${type} resume!\n\n` +
-        `Please enter your personal information in this format:\n` +
-        `Name\nEmail\nPhone\nLocation`;
-    
-    await sendMessage(chatId, message);
-}
-
-async function handleAuthFlow(message, chatId, userId, text, userState) {
-    switch (userState) {
-        case UserState.AWAITING_LOGIN_USERNAME:
-            await USERS_KV.put(`${userId}_temp_username`, text);
-            await setUserState(userId, UserState.AWAITING_LOGIN_PASSWORD);
-            return sendMessage(chatId, 'Please enter your password:');
-
-        case UserState.AWAITING_LOGIN_PASSWORD:
-            const loginUsername = await USERS_KV.get(`${userId}_temp_username`);
-            const loginSuccess = await attemptLogin(userId, loginUsername, text);
-            if (loginSuccess) {
-                await setUserState(userId, UserState.NONE);
-                await USERS_KV.delete(`${userId}_temp_username`);
-                return showAvailableCommands(chatId, userId);
-            }
-            await setUserState(userId, UserState.NONE);
-            return showLoginOptions(chatId);
-
-        case UserState.AWAITING_REGISTER_USERNAME:
-            await USERS_KV.put(`${userId}_temp_username`, text);
-            await setUserState(userId, UserState.AWAITING_REGISTER_PASSWORD);
-            return sendMessage(chatId, 'Please enter your desired password:');
-
-        case UserState.AWAITING_REGISTER_PASSWORD:
-            const regUsername = await USERS_KV.get(`${userId}_temp_username`);
-            await registerUser(userId, regUsername, text);
-            await setUserState(userId, UserState.NONE);
-            await USERS_KV.delete(`${userId}_temp_username`);
-            return showAvailableCommands(chatId, userId);
-
-        case UserState.AWAITING_PORTFOLIO_NAME:
-            const portfolioType = await USERS_KV.get(`${userId}_portfolio_type`);
-            await updateUserPortfolio(userId, 'type', portfolioType);
-            await updateUserPortfolio(userId, 'name', text);
-            await setUserState(userId, UserState.AWAITING_PORTFOLIO_DESCRIPTION);
-            return sendMessage(chatId, 'Great! Now please enter a description for your portfolio:');
-
-        case UserState.AWAITING_PORTFOLIO_DESCRIPTION:
-            await updateUserPortfolio(userId, 'description', text);
-            await setUserState(userId, UserState.AWAITING_PORTFOLIO_SKILLS);
-            return sendMessage(chatId, 'Please enter your skills (comma-separated):');
-
-        case UserState.AWAITING_PORTFOLIO_SKILLS:
-            await updateUserPortfolio(userId, 'skills', text.split(',').map(s => s.trim()));
-            await setUserState(userId, UserState.NONE);
-            const portfolioLink = await generatePortfolioLink(userId);
-            return sendMessage(chatId, `Portfolio created! You can view it here: ${portfolioLink}`);
-
-        case UserState.AWAITING_RESUME_PERSONAL:
-            const resumeType = await USERS_KV.get(`${userId}_resume_type`);
-            await updateUserResume(userId, 'type', resumeType);
-            await updateUserResume(userId, 'personal', text);
-            await setUserState(userId, UserState.AWAITING_RESUME_EDUCATION);
-            return sendMessage(chatId, 'Please enter your education history:');
-
-        case UserState.AWAITING_RESUME_EDUCATION:
-            await updateUserResume(userId, 'education', text);
-            await setUserState(userId, UserState.AWAITING_RESUME_EXPERIENCE);
-            return sendMessage(chatId, 'Please enter your work experience:');
-
-        case UserState.AWAITING_RESUME_EXPERIENCE:
-            await updateUserResume(userId, 'experience', text);
-            await setUserState(userId, UserState.AWAITING_RESUME_SKILLS);
-            return sendMessage(chatId, 'Finally, please enter your skills:');
-
-        case UserState.AWAITING_RESUME_SKILLS:
-            await updateUserResume(userId, 'skills', text.split(',').map(s => s.trim()));
-            await setUserState(userId, UserState.NONE);
-            const resumeLink = await generateResumeLink(userId);
-            return sendMessage(chatId, `Resume created! You can view it here: ${resumeLink}`);
+            return profileHandler.handleProfileView(chatId, userId);
     }
 }
 
@@ -452,33 +286,6 @@ async function setUserState(userId, state) {
 
 async function getUserState(userId) {
     return (await USERS_KV.get(`${userId}_state`)) || UserState.NONE;
-}
-
-async function checkUserLogin(userId) {
-    const userData = await USERS_KV.get(`user_${userId}`);
-    return !!userData;
-}
-
-async function attemptLogin(userId, username, password) {
-    const userData = await USERS_KV.get(`user_${username}`);
-    if (!userData) return false;
-    
-    const user = JSON.parse(userData);
-    const passwordMatch = await compare(password, user.password);
-    
-    if (passwordMatch) {
-        await USERS_KV.put(`user_${userId}`, JSON.stringify({
-            ...user,
-            lastLogin: new Date().toISOString()
-        }));
-        return true;
-    }
-    return false;
-}
-
-async function logout(userId) {
-    await USERS_KV.delete(`user_${userId}`);
-    await setUserState(userId, UserState.NONE);
 }
 
 async function sendMessage(chatId, text, options = {}) {
@@ -559,80 +366,5 @@ async function handleFileUpload(message, chatId) {
       await USERS_KV.put(String(message.from.id) + '_file_id', message.document.file_id);
     }
   }
-  async function generatePortfolioLink(userId) {
-    const token = generateToken();
-    return `${WORKER_URL}/portfolio/${userId}/${token}`;
-  }
 
-async function handlePortfolioCommand(chatId, userId) {
-    const isLoggedIn = await checkUserLogin(userId);
-    if (!isLoggedIn) {
-        return showLoginOptions(chatId);
-    }
 
-    const keyboard = {
-        inline_keyboard: [
-            [{ text: '🆕 Create New Portfolio', callback_data: 'create_portfolio' }],
-            [{ text: '📂 View My Portfolios', callback_data: 'view_portfolios' }],
-            [{ text: '✏️ Edit Portfolio', callback_data: 'edit_portfolio' }],
-            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
-        ]
-    };
-
-    await sendMessage(chatId, 'Portfolio Management:', { reply_markup: keyboard });
-}
-
-async function handleResumeCommand(chatId, userId) {
-    const isLoggedIn = await checkUserLogin(userId);
-    if (!isLoggedIn) {
-        return showLoginOptions(chatId);
-    }
-
-    const keyboard = {
-        inline_keyboard: [
-            [{ text: '🆕 Create New Resume', callback_data: 'create_resume' }],
-            [{ text: '📄 View My Resumes', callback_data: 'view_resumes' }],
-            [{ text: '✏️ Edit Resume', callback_data: 'edit_resume' }],
-            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
-        ]
-    };
-
-    await sendMessage(chatId, 'Resume Management:', { reply_markup: keyboard });
-}
-
-async function updateUserPortfolio(userId, field, value) {
-    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
-    if (!userData.portfolio) userData.portfolio = {};
-    userData.portfolio[field] = value;
-    await USERS_KV.put(`user_${userId}`, JSON.stringify(userData));
-}
-
-async function updateUserResume(userId, field, value) {
-    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
-    if (!userData.resume) userData.resume = {};
-    userData.resume[field] = value;
-    await USERS_KV.put(`user_${userId}`, JSON.stringify(userData));
-}
-
-async function handleViewPortfolios(chatId, userId) {
-    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
-    if (!userData.portfolio || !userData.portfolio.name) {
-        return sendMessage(chatId, 'You haven\'t created any portfolios yet.');
-    }
-    const portfolioLink = await generatePortfolioLink(userId);
-    return sendMessage(chatId, `Your portfolio: ${userData.portfolio.name}\nLink: ${portfolioLink}`);
-}
-
-async function handleViewResumes(chatId, userId) {
-    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
-    if (!userData.resume || !userData.resume.personal) {
-        return sendMessage(chatId, 'You haven\'t created any resumes yet.');
-    }
-    const resumeLink = await generateResumeLink(userId);
-    return sendMessage(chatId, `Your resume\nLink: ${resumeLink}`);
-}
-
-async function generateResumeLink(userId) {
-    const token = generateToken();
-    return `${WORKER_URL}/resume/${userId}/${token}`;
-}
