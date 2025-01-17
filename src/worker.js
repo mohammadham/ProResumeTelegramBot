@@ -17,7 +17,14 @@ const UserState = {
     AWAITING_LOGIN_USERNAME: 'awaiting_login_username',
     AWAITING_LOGIN_PASSWORD: 'awaiting_login_password',
     AWAITING_REGISTER_USERNAME: 'awaiting_register_username',
-    AWAITING_REGISTER_PASSWORD: 'awaiting_register_password'
+    AWAITING_REGISTER_PASSWORD: 'awaiting_register_password',
+    AWAITING_PORTFOLIO_NAME: 'awaiting_portfolio_name',
+    AWAITING_PORTFOLIO_DESCRIPTION: 'awaiting_portfolio_description',
+    AWAITING_PORTFOLIO_SKILLS: 'awaiting_portfolio_skills',
+    AWAITING_RESUME_PERSONAL: 'awaiting_resume_personal',
+    AWAITING_RESUME_EDUCATION: 'awaiting_resume_education',
+    AWAITING_RESUME_EXPERIENCE: 'awaiting_resume_experience',
+    AWAITING_RESUME_SKILLS: 'awaiting_resume_skills'
 };
 
 // Event listener for incoming requests
@@ -256,6 +263,23 @@ async function handleCallbackQuery(callback) {
                 return handleSettings(chatId);
             }
             break;
+        case 'new_portfolio':
+            await setUserState(userId, UserState.AWAITING_PORTFOLIO_NAME);
+            return sendMessage(chatId, 'Please enter a name for your portfolio:');
+        
+        case 'new_resume':
+            await setUserState(userId, UserState.AWAITING_RESUME_PERSONAL);
+            return sendMessage(chatId, 'Please enter your personal information (name, email, phone):');
+        
+        case 'view_portfolios':
+            return handleViewPortfolios(chatId, userId);
+        
+        case 'view_resumes':
+            return handleViewResumes(chatId, userId);
+        
+        case 'back_to_main':
+            await setUserState(userId, UserState.NONE);
+            return showAvailableCommands(chatId, userId);
     }
 }
 
@@ -288,6 +312,43 @@ async function handleAuthFlow(message, chatId, userId, text, userState) {
             await setUserState(userId, UserState.NONE);
             await USERS_KV.delete(`${userId}_temp_username`);
             return showAvailableCommands(chatId, userId);
+
+        case UserState.AWAITING_PORTFOLIO_NAME:
+            await updateUserPortfolio(userId, 'name', text);
+            await setUserState(userId, UserState.AWAITING_PORTFOLIO_DESCRIPTION);
+            return sendMessage(chatId, 'Great! Now please enter a description for your portfolio:');
+
+        case UserState.AWAITING_PORTFOLIO_DESCRIPTION:
+            await updateUserPortfolio(userId, 'description', text);
+            await setUserState(userId, UserState.AWAITING_PORTFOLIO_SKILLS);
+            return sendMessage(chatId, 'Please enter your skills (comma-separated):');
+
+        case UserState.AWAITING_PORTFOLIO_SKILLS:
+            await updateUserPortfolio(userId, 'skills', text.split(',').map(s => s.trim()));
+            await setUserState(userId, UserState.NONE);
+            const portfolioLink = await generatePortfolioLink(userId);
+            return sendMessage(chatId, `Portfolio created! You can view it here: ${portfolioLink}`);
+
+        case UserState.AWAITING_RESUME_PERSONAL:
+            await updateUserResume(userId, 'personal', text);
+            await setUserState(userId, UserState.AWAITING_RESUME_EDUCATION);
+            return sendMessage(chatId, 'Please enter your education history:');
+
+        case UserState.AWAITING_RESUME_EDUCATION:
+            await updateUserResume(userId, 'education', text);
+            await setUserState(userId, UserState.AWAITING_RESUME_EXPERIENCE);
+            return sendMessage(chatId, 'Please enter your work experience:');
+
+        case UserState.AWAITING_RESUME_EXPERIENCE:
+            await updateUserResume(userId, 'experience', text);
+            await setUserState(userId, UserState.AWAITING_RESUME_SKILLS);
+            return sendMessage(chatId, 'Finally, please enter your skills:');
+
+        case UserState.AWAITING_RESUME_SKILLS:
+            await updateUserResume(userId, 'skills', text.split(',').map(s => s.trim()));
+            await setUserState(userId, UserState.NONE);
+            const resumeLink = await generateResumeLink(userId);
+            return sendMessage(chatId, `Resume created! You can view it here: ${resumeLink}`);
     }
 }
 
@@ -408,3 +469,76 @@ async function handleFileUpload(message, chatId) {
     const token = generateToken();
     return `${WORKER_URL}/portfolio/${userId}/${token}`;
   }
+
+async function handlePortfolioCommand(chatId, userId) {
+    const isLoggedIn = await checkUserLogin(userId);
+    if (!isLoggedIn) {
+        return showLoginOptions(chatId);
+    }
+
+    const keyboard = {
+        inline_keyboard: [
+            [{ text: '🆕 Create New Portfolio', callback_data: 'new_portfolio' }],
+            [{ text: '📂 View My Portfolios', callback_data: 'view_portfolios' }],
+            [{ text: '✏️ Edit Portfolio', callback_data: 'edit_portfolio' }],
+            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
+        ]
+    };
+
+    await sendMessage(chatId, 'Portfolio Management:', { reply_markup: keyboard });
+}
+
+async function handleResumeCommand(chatId, userId) {
+    const isLoggedIn = await checkUserLogin(userId);
+    if (!isLoggedIn) {
+        return showLoginOptions(chatId);
+    }
+
+    const keyboard = {
+        inline_keyboard: [
+            [{ text: '🆕 Create New Resume', callback_data: 'new_resume' }],
+            [{ text: '📄 View My Resumes', callback_data: 'view_resumes' }],
+            [{ text: '✏️ Edit Resume', callback_data: 'edit_resume' }],
+            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
+        ]
+    };
+
+    await sendMessage(chatId, 'Resume Management:', { reply_markup: keyboard });
+}
+
+async function updateUserPortfolio(userId, field, value) {
+    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
+    if (!userData.portfolio) userData.portfolio = {};
+    userData.portfolio[field] = value;
+    await USERS_KV.put(`user_${userId}`, JSON.stringify(userData));
+}
+
+async function updateUserResume(userId, field, value) {
+    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
+    if (!userData.resume) userData.resume = {};
+    userData.resume[field] = value;
+    await USERS_KV.put(`user_${userId}`, JSON.stringify(userData));
+}
+
+async function handleViewPortfolios(chatId, userId) {
+    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
+    if (!userData.portfolio || !userData.portfolio.name) {
+        return sendMessage(chatId, 'You haven\'t created any portfolios yet.');
+    }
+    const portfolioLink = await generatePortfolioLink(userId);
+    return sendMessage(chatId, `Your portfolio: ${userData.portfolio.name}\nLink: ${portfolioLink}`);
+}
+
+async function handleViewResumes(chatId, userId) {
+    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
+    if (!userData.resume || !userData.resume.personal) {
+        return sendMessage(chatId, 'You haven\'t created any resumes yet.');
+    }
+    const resumeLink = await generateResumeLink(userId);
+    return sendMessage(chatId, `Your resume\nLink: ${resumeLink}`);
+}
+
+async function generateResumeLink(userId) {
+    const token = generateToken();
+    return `${WORKER_URL}/resume/${userId}/${token}`;
+}
