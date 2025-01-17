@@ -248,8 +248,12 @@ async function handleCallbackQuery(callback) {
             await logout(userId);
             return showLoginOptions(chatId);
         case 'create_portfolio':
-            return handlePortfolioCommand(chatId, userId);
+            return handlePortfolioCreationFlow(chatId, userId);
         case 'create_resume':
+            return handleResumeCreationFlow(chatId, userId);
+        case 'portfolio':
+            return handlePortfolioCommand(chatId, userId);
+        case 'resume':
             return handleResumeCommand(chatId, userId);
         case 'help':
             return showHelp(chatId);
@@ -280,7 +284,93 @@ async function handleCallbackQuery(callback) {
         case 'back_to_main':
             await setUserState(userId, UserState.NONE);
             return showAvailableCommands(chatId, userId);
+        case 'profile':
+            return handleProfileView(chatId, userId);
     }
+}
+
+async function handleProfileView(chatId, userId) {
+    const userData = JSON.parse(await USERS_KV.get(`user_${userId}`));
+    if (!userData) {
+        return sendMessage(chatId, 'Profile not found. Please login again.');
+    }
+
+    const keyboard = {
+        inline_keyboard: [
+            [{ text: '📝 Edit Profile', callback_data: 'edit_profile' }],
+            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
+        ]
+    };
+
+    const profileText = `👤 Your Profile\n\n` +
+        `Username: ${userData.username}\n` +
+        `Portfolios: ${userData.portfolio ? '1' : '0'}\n` +
+        `Resumes: ${userData.resume ? '1' : '0'}\n` +
+        `Last Login: ${new Date(userData.lastLogin).toLocaleString()}`;
+
+    await sendMessage(chatId, profileText, { reply_markup: keyboard });
+}
+
+async function handlePortfolioCreationFlow(chatId, userId) {
+    const keyboard = {
+        inline_keyboard: [
+            [{ text: '🎨 Basic Portfolio', callback_data: 'portfolio_basic' }],
+            [{ text: '💼 Professional Portfolio', callback_data: 'portfolio_pro' }],
+            [{ text: '🌟 Creative Portfolio', callback_data: 'portfolio_creative' }],
+            [{ text: '🌟 Custom Portfolio', callback_data: 'portfolio_custom' }],
+            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
+        ]
+    };
+
+    const message = `Choose your portfolio type:\n\n` +
+        `🎨 Basic - Simple and clean design\n` +
+        `💼 Professional - Formal and detailed\n` +
+        `🌟 Creative - Unique and eye-catching\n`+
+        `🌟 Custom - Unique and Custom design` 
+        ;
+
+    await sendMessage(chatId, message, { reply_markup: keyboard });
+}
+
+async function handleResumeCreationFlow(chatId, userId) {
+    const keyboard = {
+        inline_keyboard: [
+            [{ text: '📄 Standard Resume', callback_data: 'resume_standard' }],
+            [{ text: '🎯 Targeted Resume', callback_data: 'resume_targeted' }],
+            [{ text: '💫 Modern Resume', callback_data: 'resume_modern' }],
+            [{ text: '🌟 Custom Resume', callback_data: 'resume_custom' }],
+            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
+        ]
+    };
+
+    const message = `Choose your resume type:\n\n` +
+        `📄 Standard - Traditional format\n` +
+        `🎯 Targeted - Industry-specific\n` +
+        `💫 Modern - Contemporary design\n` +
+        `🌟 Custom - Unique and Custom design` ;
+
+    await sendMessage(chatId, message, { reply_markup: keyboard });
+}
+
+async function startPortfolioCreation(chatId, userId, type) {
+    await USERS_KV.put(`${userId}_portfolio_type`, type);
+    await setUserState(userId, UserState.AWAITING_PORTFOLIO_NAME);
+    
+    const message = `Let's create your ${type} portfolio!\n\n` +
+        `First, please enter a name for your portfolio:`;
+    
+    await sendMessage(chatId, message);
+}
+
+async function startResumeCreation(chatId, userId, type) {
+    await USERS_KV.put(`${userId}_resume_type`, type);
+    await setUserState(userId, UserState.AWAITING_RESUME_PERSONAL);
+    
+    const message = `Let's create your ${type} resume!\n\n` +
+        `Please enter your personal information in this format:\n` +
+        `Name\nEmail\nPhone\nLocation`;
+    
+    await sendMessage(chatId, message);
 }
 
 async function handleAuthFlow(message, chatId, userId, text, userState) {
@@ -314,6 +404,8 @@ async function handleAuthFlow(message, chatId, userId, text, userState) {
             return showAvailableCommands(chatId, userId);
 
         case UserState.AWAITING_PORTFOLIO_NAME:
+            const portfolioType = await USERS_KV.get(`${userId}_portfolio_type`);
+            await updateUserPortfolio(userId, 'type', portfolioType);
             await updateUserPortfolio(userId, 'name', text);
             await setUserState(userId, UserState.AWAITING_PORTFOLIO_DESCRIPTION);
             return sendMessage(chatId, 'Great! Now please enter a description for your portfolio:');
@@ -330,6 +422,8 @@ async function handleAuthFlow(message, chatId, userId, text, userState) {
             return sendMessage(chatId, `Portfolio created! You can view it here: ${portfolioLink}`);
 
         case UserState.AWAITING_RESUME_PERSONAL:
+            const resumeType = await USERS_KV.get(`${userId}_resume_type`);
+            await updateUserResume(userId, 'type', resumeType);
             await updateUserResume(userId, 'personal', text);
             await setUserState(userId, UserState.AWAITING_RESUME_EDUCATION);
             return sendMessage(chatId, 'Please enter your education history:');
@@ -478,7 +572,7 @@ async function handlePortfolioCommand(chatId, userId) {
 
     const keyboard = {
         inline_keyboard: [
-            [{ text: '🆕 Create New Portfolio', callback_data: 'new_portfolio' }],
+            [{ text: '🆕 Create New Portfolio', callback_data: 'create_portfolio' }],
             [{ text: '📂 View My Portfolios', callback_data: 'view_portfolios' }],
             [{ text: '✏️ Edit Portfolio', callback_data: 'edit_portfolio' }],
             [{ text: '🔙 Back', callback_data: 'back_to_main' }]
@@ -496,7 +590,7 @@ async function handleResumeCommand(chatId, userId) {
 
     const keyboard = {
         inline_keyboard: [
-            [{ text: '🆕 Create New Resume', callback_data: 'new_resume' }],
+            [{ text: '🆕 Create New Resume', callback_data: 'create_resume' }],
             [{ text: '📄 View My Resumes', callback_data: 'view_resumes' }],
             [{ text: '✏️ Edit Resume', callback_data: 'edit_resume' }],
             [{ text: '🔙 Back', callback_data: 'back_to_main' }]
