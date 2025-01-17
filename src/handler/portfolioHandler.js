@@ -1,5 +1,6 @@
-import Telegram from './telegramHandler';
-import KVStore from './kvHandler';
+import Telegram from './telegramHandler.js';
+import KVStore from './kvHandler.js';
+import { generateToken } from '../utils/helpers';
 
 class PortfolioHandler {
     constructor(botToken, workerUrl, telegram, kvStore) {
@@ -8,7 +9,20 @@ class PortfolioHandler {
         this.botToken = botToken;
         this.workerUrl = workerUrl;
     }
-
+    UserState = {
+        NONE: 'none',
+        AWAITING_LOGIN_USERNAME: 'awaiting_login_username',
+        AWAITING_LOGIN_PASSWORD: 'awaiting_login_password',
+        AWAITING_REGISTER_USERNAME: 'awaiting_register_username',
+        AWAITING_REGISTER_PASSWORD: 'awaiting_register_password',
+        AWAITING_PORTFOLIO_NAME: 'awaiting_portfolio_name',
+        AWAITING_PORTFOLIO_DESCRIPTION: 'awaiting_portfolio_description',
+        AWAITING_PORTFOLIO_SKILLS: 'awaiting_portfolio_skills',
+        AWAITING_RESUME_PERSONAL: 'awaiting_resume_personal',
+        AWAITING_RESUME_EDUCATION: 'awaiting_resume_education',
+        AWAITING_RESUME_EXPERIENCE: 'awaiting_resume_experience',
+        AWAITING_RESUME_SKILLS: 'awaiting_resume_skills'
+    };
     async generatePortfolioLink(userId) {
         const token = this.generateToken();
         return `${this.workerUrl}/portfolio/${userId}/${token}`;
@@ -50,7 +64,7 @@ class PortfolioHandler {
 
     async startPortfolioCreation(chatId, userId, type) {
         await this.kvStore.put(`${userId}_portfolio_type`, type);
-        await this.setUserState(userId, UserState.AWAITING_PORTFOLIO_NAME);
+        await this.setUserState(userId, this.UserState.AWAITING_PORTFOLIO_NAME);
         
         const message = `Let's create your ${type} portfolio!\n\n` +
             `First, please enter a name for your portfolio:`;
@@ -79,7 +93,24 @@ class PortfolioHandler {
         await this.telegram.sendMessage(chatId, message, { reply_markup: keyboard });
     }
 
+    async showLoginOptions(chatId) {
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: '🔑 Login', callback_data: 'login' }],
+                [{ text: '❓ Help', callback_data: 'help' }]
+            ]
+        };
+        await this.telegram.sendMessage(chatId, 'Please login to continue:', { reply_markup: keyboard });
+    }
 
+    async checkUserLogin(userId) {
+        const userData = await this.kvStore.get(`user_${userId}`);
+        return !!userData;
+    }
+
+    async setUserState(userId, state) {
+        await this.kvStore.put(`${userId}_state`, state);
+    }
 }
 
 export default PortfolioHandler;

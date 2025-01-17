@@ -10,10 +10,15 @@ import Telegram from './handler/telegramHandler';
 import KVStore from './handler/kvHandler';
 import StateManager from './handler/userstateHandler';
 import { showHelp, handleManageUsers, handleSettings } from './utils/helpers';
+import { 
+    showAvailableCommands, 
+    handleAdminCommands
+} from './utils/helpers';
 
 // Define environment variables
 const BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN';
 const OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY';
+const CHANNEL_ID = 'YOUR_TELEGRAM_CHANNEL_ID';  // Added missing parameter
 const WORKER_URL = 'YOUR_WORKER_URL';
 
 // Initialize handlers

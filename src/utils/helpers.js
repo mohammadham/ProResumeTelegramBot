@@ -69,7 +69,7 @@ export async function setUserState(kvStore, userId, state) {
     await kvStore.put(`${userId}_state`, state);
 }
 
-export async function showAvailableCommands(chatId, userId, telegram, isAdmin) {
+export async function showAvailableCommands(chatId, userId, isAdmin, telegram) {
     const keyboard = {
         inline_keyboard: [
             [{ text: '📝 Create Portfolio', callback_data: 'create_portfolio' },
@@ -99,5 +99,4 @@ export async function handleAdminCommands(message, chatId, text, telegram, kvSto
         }
         return telegram.sendMessage(chatId, 'Broadcast sent successfully!');
     }
-    // Add more admin commands as needed
 }

@@ -1,5 +1,5 @@
-import Telegram from './telegramHandler';
-import KVStore from './kvHandler';
+import Telegram from './telegramHandler.js';
+import KVStore from './kvHandler.js';
 
 class ProfileHandler {
     constructor(botToken, telegram, kvStore) {

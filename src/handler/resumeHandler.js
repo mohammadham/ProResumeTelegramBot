@@ -1,5 +1,6 @@
-import Telegram from './telegramHandler';
-import KVStore from './kvHandler';
+import Telegram from './telegramHandler.js';
+import KVStore from './kvHandler.js';
+import { generateToken } from '../utils/helpers';
 
 class ResumeHandler {
     constructor(botToken, workerUrl, telegram, kvStore) {
@@ -8,11 +9,24 @@ class ResumeHandler {
         this.botToken = botToken;
         this.workerUrl = workerUrl;
     }
-
+    UserState = {
+        NONE: 'none',
+        AWAITING_LOGIN_USERNAME: 'awaiting_login_username',
+        AWAITING_LOGIN_PASSWORD: 'awaiting_login_password',
+        AWAITING_REGISTER_USERNAME: 'awaiting_register_username',
+        AWAITING_REGISTER_PASSWORD: 'awaiting_register_password',
+        AWAITING_PORTFOLIO_NAME: 'awaiting_portfolio_name',
+        AWAITING_PORTFOLIO_DESCRIPTION: 'awaiting_portfolio_description',
+        AWAITING_PORTFOLIO_SKILLS: 'awaiting_portfolio_skills',
+        AWAITING_RESUME_PERSONAL: 'awaiting_resume_personal',
+        AWAITING_RESUME_EDUCATION: 'awaiting_resume_education',
+        AWAITING_RESUME_EXPERIENCE: 'awaiting_resume_experience',
+        AWAITING_RESUME_SKILLS: 'awaiting_resume_skills'
+    };
     async handleViewResumes(chatId, userId) {
-        const userData = JSON.parse(await this.KVStore.get(`user_${userId}`));
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
         if (!userData.resume || !userData.resume.personal) {
-            return this.sendMessage(chatId, 'You haven\'t created any resumes yet.');
+            return this.telegram.sendMessage(chatId, 'You haven\'t created any resumes yet.');
         }
         const resumeLink = await this.generateResumeLink(userId);
         return this.telegram.sendMessage(chatId, `Your resume\nLink: ${resumeLink}`);
@@ -24,10 +38,10 @@ class ResumeHandler {
     }
 
     async updateUserResume(userId, field, value) {
-        const userData = JSON.parse(await this.KVStore.get(`user_${userId}`));
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
         if (!userData.resume) userData.resume = {};
         userData.resume[field] = value;
-        await this.KVStore.put(`user_${userId}`, JSON.stringify(userData));
+        await this.kvStore.put(`user_${userId}`, JSON.stringify(userData));
     }
 
     async handleResumeCommand(chatId, userId) {
@@ -49,8 +63,8 @@ class ResumeHandler {
     }
 
     async startResumeCreation(chatId, userId, type) {
-        await this.KVStore.put(`${userId}_resume_type`, type);
-        await this.setUserState(userId, UserState.AWAITING_RESUME_PERSONAL);
+        await this.kvStore.put(`${userId}_resume_type`, type);
+        await this.setUserState(userId, this.UserState.AWAITING_RESUME_PERSONAL);
         
         const message = `Let's create your ${type} resume!\n\n` +
             `Please enter your personal information in this format:\n` +
@@ -77,6 +91,43 @@ class ResumeHandler {
             `🌟 Custom - Unique and Custom design` ;
     
         await this.telegram.sendMessage(chatId, message, { reply_markup: keyboard });
+    }
+
+    async handleResumeCallback(chatId, userId, data) {
+        switch (data) {
+            case 'create_resume':
+                return this.handleResumeCreationFlow(chatId, userId);
+            case 'view_resumes':
+                return this.handleViewResumes(chatId, userId);
+            case 'edit_resume':
+                return this.handleResumeEdit(chatId, userId);
+            case 'resume_standard':
+            case 'resume_targeted':
+            case 'resume_modern':
+            case 'resume_custom':
+                return this.startResumeCreation(chatId, userId, data.split('_')[1]);
+            default:
+                return this.telegram.sendMessage(chatId, 'Invalid resume action');
+        }
+    }
+
+    async setUserState(userId, state) {
+        await this.kvStore.put(`${userId}_state`, state);
+    }
+
+    async showLoginOptions(chatId) {
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: '🔑 Login', callback_data: 'login' }],
+                [{ text: '❓ Help', callback_data: 'help' }]
+            ]
+        };
+        await this.telegram.sendMessage(chatId, 'Please login to continue:', { reply_markup: keyboard });
+    }
+
+    async checkUserLogin(userId) {
+        const userData = await this.kvStore.get(`user_${userId}`);
+        return !!userData;
     }
 }
 

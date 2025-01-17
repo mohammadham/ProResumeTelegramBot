@@ -1,6 +1,8 @@
-import {Telegram} from "telegramHandler";
-import {KVStore} from "kvHandler";
+import Telegram from "./telegramHandler.js";
+import KVStore from "./kvHandler.js";
 import { hash, compare } from 'bcryptjs';
+import { generateToken, showAvailableCommands } from '../utils/helpers';
+
 class AuthHandler {
     constructor(botToken, adminKV,telegram, kvStore, stateManager) {
         this.telegram = telegram;
@@ -10,6 +12,20 @@ class AuthHandler {
         // this.usersKV = usersKV;
         this.adminKV = adminKV;
     }
+    UserState = {
+        NONE: 'none',
+        AWAITING_LOGIN_USERNAME: 'awaiting_login_username',
+        AWAITING_LOGIN_PASSWORD: 'awaiting_login_password',
+        AWAITING_REGISTER_USERNAME: 'awaiting_register_username',
+        AWAITING_REGISTER_PASSWORD: 'awaiting_register_password',
+        AWAITING_PORTFOLIO_NAME: 'awaiting_portfolio_name',
+        AWAITING_PORTFOLIO_DESCRIPTION: 'awaiting_portfolio_description',
+        AWAITING_PORTFOLIO_SKILLS: 'awaiting_portfolio_skills',
+        AWAITING_RESUME_PERSONAL: 'awaiting_resume_personal',
+        AWAITING_RESUME_EDUCATION: 'awaiting_resume_education',
+        AWAITING_RESUME_EXPERIENCE: 'awaiting_resume_experience',
+        AWAITING_RESUME_SKILLS: 'awaiting_resume_skills'
+    };
 
     async checkUserLogin(userId) {
         const userData = await this.kvStore.get(`user_${userId}`);
@@ -37,79 +53,79 @@ class AuthHandler {
         // await this.usersKV.delete(`user_${userId}`);
         // await setUserState(userId, UserState.NONE);
         await this.kvStore.delete(`user_${userId}`);
-        await this.stateManager.setUserState(userId, UserState.NONE);
+        await this.stateManager.setUserState(userId, this.UserState.NONE);
     }
 
     async handleAuthFlow(message, chatId, userId, text, userState) {
         switch (userState) {
-            case UserState.AWAITING_LOGIN_USERNAME:
+            case this.UserState.AWAITING_LOGIN_USERNAME:
                 await this.kvStore.put(`${userId}_temp_username`, text);
-                await setUserState(userId, UserState.AWAITING_LOGIN_PASSWORD);
-                return this.sendMessage(chatId, 'Please enter your password:');
+                await this.setUserState(userId, this.UserState.AWAITING_LOGIN_PASSWORD);
+                return this.telegram.sendMessage(chatId, 'Please enter your password:');
 
-            case UserState.AWAITING_LOGIN_PASSWORD:
+            case this.UserState.AWAITING_LOGIN_PASSWORD:
                 const loginUsername = await this.kvStore.get(`${userId}_temp_username`);
                 const loginSuccess = await this.attemptLogin(userId, loginUsername, text);
                 if (loginSuccess) {
-                    await setUserState(userId, UserState.NONE);
+                    await this.setUserState(userId, this.UserState.NONE);
                     await this.kvStore.delete(`${userId}_temp_username`);
                     return showAvailableCommands(chatId, userId);
                 }
-                await setUserState(userId, UserState.NONE);
+                await this.setUserState(userId, this.UserState.NONE);
                 return showLoginOptions(chatId);
 
-            case UserState.AWAITING_REGISTER_USERNAME:
+            case this.UserState.AWAITING_REGISTER_USERNAME:
                 await this.kvStore.put(`${userId}_temp_username`, text);
-                await setUserState(userId, UserState.AWAITING_REGISTER_PASSWORD);
-                return this.sendMessage(chatId, 'Please enter your desired password:');
+                await this.setUserState(userId, this.UserState.AWAITING_REGISTER_PASSWORD);
+                return this.telegram.sendMessage(chatId, 'Please enter your desired password:');
 
-            case UserState.AWAITING_REGISTER_PASSWORD:
+            case this.UserState.AWAITING_REGISTER_PASSWORD:
                 const regUsername = await this.kvStore.get(`${userId}_temp_username`);
-                await registerUser(userId, regUsername, text);
-                await setUserState(userId, UserState.NONE);
+                await this.registerUser(userId, regUsername, text);
+                await this.setUserState(userId, this.UserState.NONE);
                 await this.kvStore.delete(`${userId}_temp_username`);
                 return showAvailableCommands(chatId, userId);
 
-            case UserState.AWAITING_PORTFOLIO_NAME:
+            case this.UserState.AWAITING_PORTFOLIO_NAME:
                 const portfolioType = await this.kvStore.get(`${userId}_portfolio_type`);
-                await updateUserPortfolio(userId, 'type', portfolioType);
-                await updateUserPortfolio(userId, 'name', text);
-                await setUserState(userId, UserState.AWAITING_PORTFOLIO_DESCRIPTION);
-                return this.sendMessage(chatId, 'Great! Now please enter a description for your portfolio:');
+                await this.updateUserPortfolio(userId, 'type', portfolioType);
+                await this.updateUserPortfolio(userId, 'name', text);
+                await this.setUserState(userId, this.UserState.AWAITING_PORTFOLIO_DESCRIPTION);
+                return this.telegram.sendMessage(chatId, 'Great! Now please enter a description for your portfolio:');
 
-            case UserState.AWAITING_PORTFOLIO_DESCRIPTION:
-                await updateUserPortfolio(userId, 'description', text);
-                await setUserState(userId, UserState.AWAITING_PORTFOLIO_SKILLS);
-                return this.sendMessage(chatId, 'Please enter your skills (comma-separated):');
+            case this.UserState.AWAITING_PORTFOLIO_DESCRIPTION:
+                await this.updateUserPortfolio(userId, 'description', text);
+                await this.setUserState(userId, this.UserState.AWAITING_PORTFOLIO_SKILLS);
+                return this.telegram.sendMessage(chatId, 'Please enter your skills (comma-separated):');
 
-            case UserState.AWAITING_PORTFOLIO_SKILLS:
-                await updateUserPortfolio(userId, 'skills', text.split(',').map(s => s.trim()));
-                await setUserState(userId, UserState.NONE);
-                const portfolioLink = await generatePortfolioLink(userId);
-                return this.sendMessage(chatId, `Portfolio created! You can view it here: ${portfolioLink}`);
+            case this.UserState.AWAITING_PORTFOLIO_SKILLS:
+                await this.updateUserPortfolio(userId, 'skills', text.split(',').map(s => s.trim()));
+                await this.setUserState(userId, this.UserState.NONE);
+                const portfolioLink = await this.generatePortfolioLink(userId);
+                return this.telegram.sendMessage(chatId, `Portfolio created! You can view it here: ${portfolioLink}`);
 
-            case UserState.AWAITING_RESUME_PERSONAL:
+            case this.UserState.AWAITING_RESUME_PERSONAL:
                 const resumeType = await this.kvStore.get(`${userId}_resume_type`);
-                await updateUserResume(userId, 'type', resumeType);
-                await updateUserResume(userId, 'personal', text);
-                await setUserState(userId, UserState.AWAITING_RESUME_EDUCATION);
-                return this.sendMessage(chatId, 'Please enter your education history:');
+                await this.updateUserResume(userId, 'type', resumeType);
+                await this.updateUserResume(userId, 'personal', text);
+                await this.setUserState(userId, this.UserState.AWAITING_RESUME_EDUCATION);
+                return this.telegram.sendMessage(chatId, 'Please enter your education history:');
 
-            case UserState.AWAITING_RESUME_EDUCATION:
-                await updateUserResume(userId, 'education', text);
-                await setUserState(userId, UserState.AWAITING_RESUME_EXPERIENCE);
-                return this.sendMessage(chatId, 'Please enter your work experience:');
+            case this.UserState.AWAITING_RESUME_EDUCATION:
+                await this.updateUserResume(userId, 'education', text);
+                await this.setUserState(userId, this.UserState.AWAITING_RESUME_EXPERIENCE);
+                return this.telegram.sendMessage(chatId, 'Please enter your work experience:');
 
-            case UserState.AWAITING_RESUME_EXPERIENCE:
-                await updateUserResume(userId, 'experience', text);
-                await setUserState(userId, UserState.AWAITING_RESUME_SKILLS);
-                return this.sendMessage(chatId, 'Finally, please enter your skills:');
+            case this.UserState.AWAITING_RESUME_EXPERIENCE:
+                await this.updateUserResume(userId, 'experience', text);
+                await this.setUserState(userId, this.UserState.AWAITING_RESUME_SKILLS);
+                return this.telegram.sendMessage(chatId, 'Finally, please enter your skills:');
 
-            case UserState.AWAITING_RESUME_SKILLS:
-                await updateUserResume(userId, 'skills', text.split(',').map(s => s.trim()));
-                await setUserState(userId, UserState.NONE);
-                const resumeLink = await generateResumeLink(userId);
-                return this.sendMessage(chatId, `Resume created! You can view it here: ${resumeLink}`);
+            case this.UserState.AWAITING_RESUME_SKILLS:
+                await this.updateUserResume(userId, 'skills', text.split(',').map(s => s.trim()));
+                await this.setUserState(userId, this.UserState.NONE);
+                const resumeLink = await this.generateResumeLink(userId);
+                return this.telegram.sendMessage(chatId, `Resume created! You can view it here: ${resumeLink}`);
         }
     }
 
@@ -122,7 +138,7 @@ class AuthHandler {
             ]
         };
         
-        await this.sendMessage(chatId, 'Welcome! Please login or register to continue:', 
+        await this.telegram.sendMessage(chatId, 'Welcome! Please login or register to continue:', 
             { reply_markup: keyboard });
     }
 
@@ -138,17 +154,48 @@ class AuthHandler {
         return admins ? admins.includes(userId) : false;
     }
 
-    async sendMessage(chatId, text, options = {}) {
-        await fetch(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
-            method: 'POST',
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: text,
-                parse_mode: 'HTML',
-                ...options
-            }),
-            headers: { 'Content-Type': 'application/json' }
-        });
+    async setUserState(userId, state) {
+        await this.stateManager.setUserState(userId, state);
+    }
+
+    async updateUserPortfolio(userId, field, value) {
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
+        if (!userData.portfolio) userData.portfolio = {};
+        userData.portfolio[field] = value;
+        await this.kvStore.put(`user_${userId}`, JSON.stringify(userData));
+    }
+
+    async updateUserResume(userId, field, value) {
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
+        if (!userData.resume) userData.resume = {};
+        userData.resume[field] = value;
+        await this.kvStore.put(`user_${userId}`, JSON.stringify(userData));
+    }
+
+    async generatePortfolioLink(userId) {
+        const token = generateToken();
+        return `${this.workerUrl}/portfolio/${userId}/${token}`;
+    }
+
+    async generateResumeLink(userId) {
+        const token = generateToken();
+        return `${this.workerUrl}/resume/${userId}/${token}`;
+    }
+
+    async handleAuthCallback(chatId, userId, action) {
+        switch (action) {
+            case 'login':
+                await this.setUserState(userId, this.UserState.AWAITING_LOGIN_USERNAME);
+                return this.telegram.sendMessage(chatId, 'Please enter your username:');
+            case 'register':
+                await this.setUserState(userId, this.UserState.AWAITING_REGISTER_USERNAME);
+                return this.telegram.sendMessage(chatId, 'Please choose a username:');
+            case 'logout':
+                await this.logout(userId);
+                return this.showLoginOptions(chatId);
+            default:
+                return this.telegram.sendMessage(chatId, 'Invalid auth action');
+        }
     }
 }
 
