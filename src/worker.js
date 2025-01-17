@@ -1,5 +1,5 @@
 // Import necessary libraries
-import { hash } from 'bcryptjs';
+import { hash, compare } from 'bcryptjs';
 
 // Define environment variables
 const BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN';
@@ -10,6 +10,15 @@ const WORKER_URL = 'YOUR_WORKER_URL';
 // Initialize KV namespaces
 const ADMIN_KV = KV_NAMESPACE_ADMIN;
 const USERS_KV = KV_NAMESPACE_USERS;
+
+// Add new state management
+const UserState = {
+    NONE: 'none',
+    AWAITING_LOGIN_USERNAME: 'awaiting_login_username',
+    AWAITING_LOGIN_PASSWORD: 'awaiting_login_password',
+    AWAITING_REGISTER_USERNAME: 'awaiting_register_username',
+    AWAITING_REGISTER_PASSWORD: 'awaiting_register_password'
+};
 
 // Event listener for incoming requests
 addEventListener('fetch', event => {
@@ -129,6 +138,20 @@ async function registerUser(userId, username, password) {
 
 // Client interaction
 async function handleUserInteraction(message, chatId, userId, text) {
+    // Check if user is logged in
+    const isLoggedIn = await checkUserLogin(userId);
+    const userState = await getUserState(userId);
+
+    if (!isLoggedIn && userState === UserState.NONE) {
+        return showLoginOptions(chatId);
+    }
+
+    // Handle authentication states
+    if (!isLoggedIn) {
+        return handleAuthFlow(message, chatId, userId, text, userState);
+    }
+
+    // Handle normal commands for logged in users
     if (text?.startsWith('/')) {
         return handleCommands(message, chatId, userId, text);
     }
@@ -148,6 +171,19 @@ async function handleUserInteraction(message, chatId, userId, text) {
     return showAvailableCommands(chatId, userId);
 }
 
+async function showLoginOptions(chatId) {
+    const keyboard = {
+        inline_keyboard: [
+            [{ text: '🔑 Login', callback_data: 'login' },
+             { text: '📝 Register', callback_data: 'register' }],
+            [{ text: '❓ Help', callback_data: 'help' }]
+        ]
+    };
+    
+    await sendMessage(chatId, 'Welcome! Please login or register to continue:', 
+        { reply_markup: keyboard });
+}
+
 async function handleCommands(message, chatId, userId, text) {
     const command = text.split(' ')[0].toLowerCase();
     
@@ -165,18 +201,21 @@ async function handleCommands(message, chatId, userId, text) {
     }
 }
 
+// Modify showAvailableCommands
 async function showAvailableCommands(chatId, userId) {
     const isAdmin = await isUserAdmin(userId);
     const keyboard = {
         inline_keyboard: [
             [{ text: '📝 Create Portfolio', callback_data: 'create_portfolio' },
              { text: '📄 Create Resume', callback_data: 'create_resume' }],
+            [{ text: '👤 My Profile', callback_data: 'profile' },
+             { text: '📤 Logout', callback_data: 'logout' }],
             [{ text: '❓ Help', callback_data: 'help' }]
         ]
     };
 
     if (isAdmin) {
-        keyboard.inline_keyboard.push([
+        keyboard.inline_keyboard.unshift([
             { text: '👥 Manage Users', callback_data: 'manage_users' },
             { text: '⚙️ Settings', callback_data: 'settings' }
         ]);
@@ -185,12 +224,22 @@ async function showAvailableCommands(chatId, userId) {
     await sendMessage(chatId, 'Choose an action:', { reply_markup: keyboard });
 }
 
+// Modify handleCallbackQuery
 async function handleCallbackQuery(callback) {
     const chatId = callback.message.chat.id;
     const userId = callback.from.id;
     const data = callback.data;
 
     switch (data) {
+        case 'login':
+            await setUserState(userId, UserState.AWAITING_LOGIN_USERNAME);
+            return sendMessage(chatId, 'Please enter your username:');
+        case 'register':
+            await setUserState(userId, UserState.AWAITING_REGISTER_USERNAME);
+            return sendMessage(chatId, 'Please enter your desired username:');
+        case 'logout':
+            await logout(userId);
+            return showLoginOptions(chatId);
         case 'create_portfolio':
             return handlePortfolioCommand(chatId, userId);
         case 'create_resume':
@@ -208,6 +257,73 @@ async function handleCallbackQuery(callback) {
             }
             break;
     }
+}
+
+async function handleAuthFlow(message, chatId, userId, text, userState) {
+    switch (userState) {
+        case UserState.AWAITING_LOGIN_USERNAME:
+            await USERS_KV.put(`${userId}_temp_username`, text);
+            await setUserState(userId, UserState.AWAITING_LOGIN_PASSWORD);
+            return sendMessage(chatId, 'Please enter your password:');
+
+        case UserState.AWAITING_LOGIN_PASSWORD:
+            const loginUsername = await USERS_KV.get(`${userId}_temp_username`);
+            const loginSuccess = await attemptLogin(userId, loginUsername, text);
+            if (loginSuccess) {
+                await setUserState(userId, UserState.NONE);
+                await USERS_KV.delete(`${userId}_temp_username`);
+                return showAvailableCommands(chatId, userId);
+            }
+            await setUserState(userId, UserState.NONE);
+            return showLoginOptions(chatId);
+
+        case UserState.AWAITING_REGISTER_USERNAME:
+            await USERS_KV.put(`${userId}_temp_username`, text);
+            await setUserState(userId, UserState.AWAITING_REGISTER_PASSWORD);
+            return sendMessage(chatId, 'Please enter your desired password:');
+
+        case UserState.AWAITING_REGISTER_PASSWORD:
+            const regUsername = await USERS_KV.get(`${userId}_temp_username`);
+            await registerUser(userId, regUsername, text);
+            await setUserState(userId, UserState.NONE);
+            await USERS_KV.delete(`${userId}_temp_username`);
+            return showAvailableCommands(chatId, userId);
+    }
+}
+
+async function setUserState(userId, state) {
+    await USERS_KV.put(`${userId}_state`, state);
+}
+
+async function getUserState(userId) {
+    return (await USERS_KV.get(`${userId}_state`)) || UserState.NONE;
+}
+
+async function checkUserLogin(userId) {
+    const userData = await USERS_KV.get(`user_${userId}`);
+    return !!userData;
+}
+
+async function attemptLogin(userId, username, password) {
+    const userData = await USERS_KV.get(`user_${username}`);
+    if (!userData) return false;
+    
+    const user = JSON.parse(userData);
+    const passwordMatch = await compare(password, user.password);
+    
+    if (passwordMatch) {
+        await USERS_KV.put(`user_${userId}`, JSON.stringify({
+            ...user,
+            lastLogin: new Date().toISOString()
+        }));
+        return true;
+    }
+    return false;
+}
+
+async function logout(userId) {
+    await USERS_KV.delete(`user_${userId}`);
+    await setUserState(userId, UserState.NONE);
 }
 
 async function sendMessage(chatId, text, options = {}) {
