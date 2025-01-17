@@ -27,7 +27,7 @@ const adminKvStore = new KVStore(KV_NAMESPACE_ADMIN);
 const stateManager = new StateManager(kvStore);
 const telegram = new Telegram(BOT_TOKEN);
 
-const authHandler = new AuthHandler(BOT_TOKEN, adminKvStore, telegram, kvStore, stateManager);
+const authHandler = new AuthHandler(BOT_TOKEN, adminKvStore, telegram, kvStore, stateManager,WORKER_URL);
 const portfolioHandler = new PortfolioHandler(BOT_TOKEN, WORKER_URL, telegram, kvStore);
 const resumeHandler = new ResumeHandler(BOT_TOKEN, WORKER_URL, telegram, kvStore);
 const profileHandler = new ProfileHandler(BOT_TOKEN, telegram, kvStore);

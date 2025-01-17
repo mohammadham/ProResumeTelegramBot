@@ -1,16 +1,16 @@
 import Telegram from "./telegramHandler.js";
 import KVStore from "./kvHandler.js";
-import { hash, compare } from 'bcryptjs';
 import { generateToken, showAvailableCommands } from '../utils/helpers';
 
 class AuthHandler {
-    constructor(botToken, adminKV,telegram, kvStore, stateManager) {
+    constructor(botToken, adminKV,telegram, kvStore, stateManager,workerURL) {
         this.telegram = telegram;
         this.kvStore = kvStore;
         this.stateManager = stateManager;
         this.botToken = botToken;
         // this.usersKV = usersKV;
         this.adminKV = adminKV;
+        this.workerUrl = workerURL;
     }
     UserState = {
         NONE: 'none',
@@ -32,12 +32,27 @@ class AuthHandler {
         return !!userData;
     }
 
+    // Replace bcrypt with simple hash function
+    async hashPassword(password) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password + 'your-secret-salt');
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Replace compare with simple hash comparison
+    async comparePasswords(password, hashedPassword) {
+        const hashedInput = await this.hashPassword(password);
+        return hashedInput === hashedPassword;
+    }
+
     async attemptLogin(userId, username, password) {
         const userData = await this.kvStore.get(`user_${username}`);
         if (!userData) return false;
         
         const user = JSON.parse(userData);
-        const passwordMatch = await compare(password, user.password);
+        const passwordMatch = await this.comparePasswords(password, user.password);
         
         if (passwordMatch) {
             await this.kvStore.put(`user_${userId}`, JSON.stringify({
@@ -72,7 +87,7 @@ class AuthHandler {
                     return showAvailableCommands(chatId, userId);
                 }
                 await this.setUserState(userId, this.UserState.NONE);
-                return showLoginOptions(chatId);
+                return this.showLoginOptions(chatId);
 
             case this.UserState.AWAITING_REGISTER_USERNAME:
                 await this.kvStore.put(`${userId}_temp_username`, text);
@@ -143,9 +158,13 @@ class AuthHandler {
     }
 
     async registerUser(userId, username, password) {
-        const hashedPassword = await hash(password, 10);
-        const data = { username, password: hashedPassword, portfolio: {}, resume: {} };
-        // await this.usersKV.put(String(userId), JSON.stringify(data));
+        const hashedPassword = await this.hashPassword(password);
+        const data = { 
+            username, 
+            password: hashedPassword, 
+            portfolio: {}, 
+            resume: {} 
+        };
         await this.kvStore.put(`user_${userId}`, data);
     }
 

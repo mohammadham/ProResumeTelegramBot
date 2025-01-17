@@ -33,7 +33,7 @@ class ResumeHandler {
     }
 
     async generateResumeLink(userId) {
-        const token = this.generateToken();
+        const token = generateToken();
         return `${this.workerUrl}/resume/${userId}/${token}`;
     }
 
@@ -109,6 +109,25 @@ class ResumeHandler {
             default:
                 return this.telegram.sendMessage(chatId, 'Invalid resume action');
         }
+    }
+
+    async handleResumeEdit(chatId, userId) {
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
+        if (!userData.resume || !userData.resume.personal) {
+            return this.telegram.sendMessage(chatId, 'You don\'t have a resume to edit yet.');
+        }
+
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: '👤 Edit Personal Info', callback_data: 'edit_resume_personal' }],
+                [{ text: '🎓 Edit Education', callback_data: 'edit_resume_education' }],
+                [{ text: '💼 Edit Experience', callback_data: 'edit_resume_experience' }],
+                [{ text: '🔧 Edit Skills', callback_data: 'edit_resume_skills' }],
+                [{ text: '🔙 Back', callback_data: 'back_to_resume' }]
+            ]
+        };
+
+        await this.telegram.sendMessage(chatId, 'What would you like to edit?', { reply_markup: keyboard });
     }
 
     async setUserState(userId, state) {

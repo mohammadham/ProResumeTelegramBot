@@ -24,7 +24,7 @@ class PortfolioHandler {
         AWAITING_RESUME_SKILLS: 'awaiting_resume_skills'
     };
     async generatePortfolioLink(userId) {
-        const token = this.generateToken();
+        const token = generateToken();
         return `${this.workerUrl}/portfolio/${userId}/${token}`;
     }
 
@@ -110,6 +110,42 @@ class PortfolioHandler {
 
     async setUserState(userId, state) {
         await this.kvStore.put(`${userId}_state`, state);
+    }
+
+    async handlePortfolioCallback(chatId, userId, data) {
+        switch (data) {
+            case 'create_portfolio':
+                return this.handlePortfolioCreationFlow(chatId, userId);
+            case 'view_portfolios':
+                return this.handleViewPortfolios(chatId, userId);
+            case 'edit_portfolio':
+                return this.handlePortfolioEdit(chatId, userId);
+            case 'portfolio_basic':
+            case 'portfolio_pro':
+            case 'portfolio_creative':
+            case 'portfolio_custom':
+                return this.startPortfolioCreation(chatId, userId, data.split('_')[1]);
+            default:
+                return this.telegram.sendMessage(chatId, 'Invalid portfolio action');
+        }
+    }
+
+    async handlePortfolioEdit(chatId, userId) {
+        const userData = JSON.parse(await this.kvStore.get(`user_${userId}`));
+        if (!userData.portfolio || !userData.portfolio.name) {
+            return this.telegram.sendMessage(chatId, 'No portfolio found to edit.');
+        }
+
+        const keyboard = {
+            inline_keyboard: [
+                [{ text: '✏️ Edit Name', callback_data: 'edit_portfolio_name' }],
+                [{ text: '📝 Edit Description', callback_data: 'edit_portfolio_description' }],
+                [{ text: '🔧 Edit Skills', callback_data: 'edit_portfolio_skills' }],
+                [{ text: '🔙 Back', callback_data: 'back_to_portfolio' }]
+            ]
+        };
+
+        await this.telegram.sendMessage(chatId, 'Choose what to edit:', { reply_markup: keyboard });
     }
 }
 
