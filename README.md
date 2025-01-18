@@ -1,3 +1,110 @@
+# ProResume Telegram Bot
+
+A professional resume and portfolio builder bot for Telegram using Cloudflare Workers.
+
+## 🎯 Project Goals
+
+- Create an easy-to-use resume and portfolio builder within Telegram
+- Provide multiple templates for resumes and portfolios
+- Enable file management and sharing
+- Support user authentication and profile management
+- Implement admin controls for bot management
+
+## 🚀 Quick Start
+
+1. **Prerequisites**
+   - Cloudflare Workers account
+   - Telegram Bot Token (from @BotFather)
+   - Node.js installed (for local development)
+
+2. **Setup**
+   ```bash
+   # Clone the repository
+   git clone https://github.com/yourusername/proresume-telegram-bot.git
+   cd proresume-telegram-bot
+
+   # Install dependencies
+   npm install
+
+   # Configure environment variables
+   cp .env.example .env
+   ```
+
+3. **Environment Variables**
+   ```env
+   BOT_TOKEN=your_telegram_bot_token
+   WORKER_URL=your_worker_url
+   CHANNEL_ID=your_telegram_channel_id
+   ```
+
+4. **Cloudflare Setup**
+   1. Create a new Worker in Cloudflare
+   2. Create KV namespaces:
+      - `USERS` - User data
+      - `ADMIN` - Admin configurations
+   3. Deploy the worker:
+      ```bash
+      wrangler publish
+      ```
+
+5. **Telegram Bot Setup**
+   1. Create bot with @BotFather
+   2. Set commands:
+      ```
+      start - Start the bot
+      portfolio - Manage portfolios
+      resume - Manage resumes
+      profile - View profile
+      help - Show help
+      ```
+
+## 💡 Contributing
+
+We welcome contributions! Here's how you can help:
+
+1. Fork the repository
+2. Create your feature branch: `git checkout -b feature/AmazingFeature`
+3. Commit changes: `git commit -m 'Add AmazingFeature'`
+4. Push to branch: `git push origin feature/AmazingFeature`
+5. Open a Pull Request
+
+## 🛣️ Roadmap
+
+1. **Phase 1 - Core Features** ✅
+   - Basic resume/portfolio creation
+   - User authentication
+   - File management
+
+2. **Phase 2 - AI Integration** 🚧
+   - OpenAI integration for content suggestions
+   - Resume optimization
+   - Skill recommendations
+
+3. **Phase 3 - Enhanced Features** 📋
+   - Multiple language support
+   - Advanced templates
+   - Analytics dashboard
+   - Payment integration
+
+## ⚙️ Requirements
+
+- Cloudflare Workers account
+- Telegram Bot API access
+- Node.js v14+
+- Basic knowledge of JavaScript/ES6
+- (Optional) OpenAI API key for AI features
+
+## 🆘 Need Help?
+
+- 📖 [Documentation](./docs)
+- 🐛 [Issue Tracker](https://github.com/mohammadham/ProResumeTelegramBot/issues)
+- 💬 [Discussions](https://github.com/yourusername/ProResumeTelegramBot/discussions)
+- 📧 Email: mohammad@proresume.top
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 Step-by-Step Implementation
 1. Bot Setup
 
@@ -159,6 +266,3 @@ Potential Code Structure
 
     Security: Implement hashing, authentication, and rate limiting.
 
-Conclusion
-
-By following this plan, you can systematically build and deploy a robust Telegram bot

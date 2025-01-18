@@ -1,3 +1,7 @@
+# Project Structure
+
+## 📁 Directory Layout
+
 Code Structure and Scripts
 1. Event Listener for Incoming Requests
 javascript
