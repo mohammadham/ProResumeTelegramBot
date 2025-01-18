@@ -4,17 +4,22 @@ class Telegram {
     }
 
     async sendMessage(chatId, text, options = {}) {
-        await fetch(`https://api.telegram.org/bot${this.BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: text,
-                parse_mode: 'HTML',
-                ...options
-            }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
+        const response = await fetch(`https://api.telegram.org/bot${this.BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              body: JSON.stringify({
+                  chat_id: chatId,
+                  text: text,
+                  parse_mode: 'HTML',
+                  ...options
+              }),
+              headers: { 'Content-Type': 'application/json' }
+          });
+          if(response.ok)
+          {
+            return new Response('OK', { status: 200 });
+          }
+          return new Response('OK', { status: 503 });
+      }
 
     async editMessageText(chatId, messageId, text) {
         await fetch(`https://api.telegram.org/bot${this.BOT_TOKEN}/editMessageText`, {

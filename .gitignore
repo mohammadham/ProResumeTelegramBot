@@ -1,0 +1,3 @@
+# If you're building an application, you may want to public your scripts in the github repo
+export.js
+worker.js

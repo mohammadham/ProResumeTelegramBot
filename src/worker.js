@@ -39,11 +39,17 @@ addEventListener('fetch', event => {
 async function handleRequest(request) {
     const url = new URL(request.url);
     
+    // Add base URL handler
+    if ((url.pathname === '/' || url.pathname === '' )&&request.method !== 'POST') {
+        return handleWebPage();
+    }
+
     if (url.pathname.startsWith('/webhook')) {
         return handleWebhook(request);
     }
 
     if (request.method !== 'POST') {
+        return handleWebPage();
         return new Response('Only POST requests allowed');
     }
 
@@ -230,6 +236,73 @@ async function handleFileUpload(message, chatId) {
       });
       await kvStore.put(String(message.from.id) + '_file_id', message.document.file_id);
     }
+}
+
+// Add this new function after the other functions
+async function handleWebPage() {
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProResume Bot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            background-color: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #0088cc;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .features {
+            text-align: left;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to ProResume Bot</h1>
+    <div class="container">
+        <h2>Your Professional Resume Builder on Telegram</h2>
+        <p>Create and manage your professional portfolios and resumes directly through Telegram!</p>
+        <a href="https://t.me/YourBotUsername" class="button">Start Using Bot</a>
+        
+        <div class="features">
+            <h3>Features:</h3>
+            <ul>
+                <li>Create professional portfolios</li>
+                <li>Generate customized resumes</li>
+                <li>Manage your professional profile</li>
+                <li>Multiple templates to choose from</li>
+                <li>Easy to use interface</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>`;
+
+    return new Response(html, {
+        headers: {
+            'content-type': 'text/html;charset=UTF-8',
+        },
+    });
 }
 
 
